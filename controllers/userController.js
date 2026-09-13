@@ -7,32 +7,28 @@ const jwt = require("jsonwebtoken");
 
 const { emailSender } = require("../utils/emailSender");
 
-
-// ================= REGISTER =================
+// =================REGISTER =================
 exports.register = async (req, res) => {
 
     // get data from request body
     const { username, email, password } = req.body;
-
     // check if username already exists
     let usernameExists = await UserModel.findOne({ username });
 
     if (usernameExists) {
         return res.status(400).json({ error: "Username already exists." });
     }
-
     // check if email already exists
     let emailExists = await UserModel.findOne({ email });
 
     if (emailExists) {
         return res.status(400).json({ error: "Email already registered." });
     }
-
     // hash password before saving
     let salt = await bcrypt.genSalt(10);
     let hashedPassword = await bcrypt.hash(password, salt);
 
-    // create new user
+    //create new user
     let user = await UserModel.create({
         username,
         email,
@@ -42,8 +38,7 @@ exports.register = async (req, res) => {
     if (!user) {
         return res.status(400).json({ error: "Failed to register user." });
     }
-
-    // create email verification token
+    //create email verification token
     let token = await TokenModel.create({
         user: user._id,
         token: crypto.randomBytes(16).toString("hex")
@@ -73,9 +68,7 @@ exports.register = async (req, res) => {
 
 };
 
-
-
-// ================= EMAIL VERIFICATION =================
+// =================EMAIL VERIFICATION =================
 exports.emailVerification = async (req, res) => {
 
     // find token
@@ -105,9 +98,7 @@ exports.emailVerification = async (req, res) => {
 
 };
 
-
-
-// ================= RESEND VERIFICATION =================
+// =================RESEND VERIFICATION =================
 exports.resendVerification = async (req, res) => {
 
     // check email
@@ -142,9 +133,7 @@ exports.resendVerification = async (req, res) => {
 
 };
 
-
-
-// ================= FORGET PASSWORD =================
+// =================FORGET PASSWORD =================
 exports.forgetPassword = async (req, res) => {
 
     // check email
@@ -175,9 +164,7 @@ exports.forgetPassword = async (req, res) => {
 
 };
 
-
-
-// ================= RESET PASSWORD =================
+// =================RESET PASSWORD =================
 exports.resetPassword = async (req, res) => {
 
     // verify token
@@ -206,9 +193,7 @@ exports.resetPassword = async (req, res) => {
 
 };
 
-
-
-// ================= LOGIN =================
+// =================LOGIN =================
 exports.login = async (req, res) => {
 
     // get login details
@@ -258,9 +243,7 @@ exports.login = async (req, res) => {
 
 };
 
-
-
-// ================= GET USERS =================
+// =================GET USERS =================
 exports.getUsersList = async (req, res) => {
 
     // get all users
@@ -273,10 +256,7 @@ exports.getUsersList = async (req, res) => {
     res.send(users);
 
 };
-
-
-
-// ================= VERIFY USER BY ADMIN =================
+// =================VERIFY USER BY ADMIN =================
 exports.verifyByAdmin = async (req, res) => {
 
     // find user
@@ -301,7 +281,7 @@ exports.verifyByAdmin = async (req, res) => {
 
 };
 
-// ================= UPDATE USER ROLE =================
+// =================UPDATE USER ROLE =================
 exports.updateRole = async (req, res) => {
 
     // update role directly
