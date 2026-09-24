@@ -5,26 +5,31 @@ const fs = require('fs')
 //To add product
 exports.addProduct = async (req, res) => {
     try {
-        if(!req.file){
-            return res.status(400).json({error: "File is required"})
+        if(!req.files || req.files.length === 0){
+            return res.status(400).json({error: "At least one image is required"})
         }
-        // Upload image to Cloudinary
-        const result = await cloudinary.uploader.upload(req.file.path)
+        // Upload all images to Cloudinary
+        const imageUrls = [];
 
-        // Cloudinary image URL
-        const imageUrl = result.secure_url
+        for (const file of req.files){
 
-        // Delete local image after uploading to Cloudinary
-        fs.unlinkSync(req.file.path)
+            const result = await cloudinary.uploader.upload(file.path)
 
+            // Cloudinary image URL
+            imageUrls.push(result.secure_url);
+            
+            // Delete local image after uploading to Cloudinary
+            fs.unlinkSync(file.path)
+        }
+        
         let newProduct = await ProductModel.create({
             product_name: req.body.product_name,
             product_description: req.body.product_description,
-            product_image: imageUrl,
+            product_image: imageUrls,
             product_brand: req.body.product_brand,
             product_price: req.body.product_price,
             category: req.body.category,
-            subCategory: req.body,subCategory,
+            subCategory: req.body.subCategory,
             count_in_stock: req.body.count_in_stock,
             product_condition: req.body.product_condition,
             product_seller: req.body.product_seller,
@@ -108,23 +113,24 @@ exports.searchProducts = async(req, res) => {
 // To update product
 exports.updateProduct = async (req, res) => {
     try{
+        // Find existing product
         let productToUpdate = await ProductModel.findById(req.params.id)
+
         if(!productToUpdate){
-            return res.status(400).json({error:"Something went wrong"})
+            return res.status(400).json({error:"Product not found"})
         }
 
         // Update image if a new image is uploaded
-        if (req.file) {
-
-            // Upload new image to Cloudinary
-            const result = await cloudinary.uploader.upload(req.file.path)
+        if (req.files && req.files.length > 0) {
 
             // Delete old image from Cloudinary
-            if (productToUpdate.product_image) {
+            if (
+                productToUpdate.product_image && productToUpdate.product_image.length > 0
+            ) {
+                for(const imageUrl of productToUpdate.product_image){
+                    try {
 
-                const imageUrl = productToUpdate.product_image
-
-                const publicId = imageUrl
+                    const publicId = imageUrl
                     .split('/upload/')[1]
                     .split('/')
                     .slice(1)
@@ -132,12 +138,33 @@ exports.updateProduct = async (req, res) => {
                     .split('.')[0]
 
                     await cloudinary.uploader.destroy(publicId)
+                    }catch(error){
+                        console.log(
+                            "Error deleting old image:",
+                            error.message
+                        )
+
+                    }
+
+                }
+  
             }
-                // Save new Cloudinary URL
-                productToUpdate.product_image = result.secure_url
+             // Upload new images
+            const imageUrls = []
+
+            for (const file of req.files) {
+
+                const result =
+                    await cloudinary.uploader.upload(file.path)
+
+                imageUrls.push(result.secure_url)
 
                 // Delete temporary local file
-                fs.unlinkSync(req.file.path)
+                fs.unlinkSync(file.path)
+            }
+
+            // Replace old images with new images
+            productToUpdate.product_image = imageUrls
         }
         // productToUpdate.product_name = req.body.product_name? req.body.product_name:productToUpdate.product_name or 
         const {product_name, product_description, product_brand, product_price,category,subCategory, count_in_stock,product_condition,product_seller, product_status, rating,usedCondition, productAge, defects, repairHistory, accessories} = req.body
@@ -216,7 +243,7 @@ exports.deleteProduct = (req, res) => {
         res.send({deletedProduct, message:"Product deleted successfully"})
     })
     .catch((error)=>{
-        res.status.json({error: error.message})
+        res.status(500).json({error: error.message})
     })
 }
 
