@@ -13,7 +13,9 @@ exports.addProduct = async (req, res) => {
 
         for (const file of req.files){
 
-            const result = await cloudinary.uploader.upload(file.path)
+            const result = await cloudinary.uploader.upload(file.path, {
+                folder: 'sasto_pasal/product'
+            })
 
             // Cloudinary image URL
             imageUrls.push(result.secure_url);
@@ -154,8 +156,10 @@ exports.updateProduct = async (req, res) => {
 
             for (const file of req.files) {
 
-                const result =
-                    await cloudinary.uploader.upload(file.path)
+                const result = await cloudinary.uploader.upload(file.path, {
+                    folder: 'sasto_pasal/product'
+                })
+
 
                 imageUrls.push(result.secure_url)
 
@@ -219,32 +223,34 @@ exports.updateProduct = async (req, res) => {
 }
 
 //To delete product
-exports.deleteProduct = (req, res) => {
-    ProductModel.findByIdAndDelete(req.params.id)
-    .then(async (deletedProduct) => {
-        if(!deletedProduct){
-            return res.status(400).json({error:"Product not found"})
+exports.deleteProduct = async (req, res) => {
+    try {
+        const deletedProduct = await ProductModel.findByIdAndDelete(req.params.id);
+
+        if (!deletedProduct) {
+            return res.status(400).json({ error: "Product not found" });
         }
 
-         // Delete image from Cloudinary
-        if (deletedProduct.product_image) {
+        if (deletedProduct.product_image?.length > 0) {
+            for (const imageUrl of deletedProduct.product_image) {
+                const publicId = imageUrl
+                    .split('/upload/')[1]
+                    .split('/')
+                    .slice(1)
+                    .join('/')
+                    .split('.')[0];
 
-            const imageUrl = deletedProduct.product_image
-
-            const publicId = imageUrl
-                .split('/upload/')[1]
-                .split('/')
-                .slice(1)
-                .join('/')
-                .split('.')[0]
-
-            await cloudinary.uploader.destroy(publicId) 
+                await cloudinary.uploader.destroy(publicId);
+            }
         }
-        res.send({deletedProduct, message:"Product deleted successfully"})
-    })
-    .catch((error)=>{
-        res.status(500).json({error: error.message})
-    })
+
+        res.send({
+            deletedProduct,
+            message: "Product deleted successfully"
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 }
 
 // To get product details
@@ -273,7 +279,8 @@ exports.getFilteredProducts = async(req, res) =>{
             }
         }
     }
-    let products = await ProductModel.find(filter).populate('category')
+    let products = await ProductModel.find(filter)
+    //.populate('category')
     if(!products){
         return res.status(400).json({error: "Something went wrong"})
     }

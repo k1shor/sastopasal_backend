@@ -64,21 +64,25 @@ exports.productAddRules = [
 
     // Used Product Condition
     check('usedCondition')
-        .optional()
-        .isIn(['Like New', 'Excellent', 'Good', 'Fair'])
-        .withMessage('Used condition must be Like New, Excellent, Good, or Fair'),
+    .if((value, { req }) => req.body.product_condition === 'Used')
+    .notEmpty()
+    .withMessage('Used condition is required for used products')
+    .isIn(['Like New', 'Excellent', 'Good', 'Fair'])
+    .withMessage('Used condition must be Like New, Excellent, Good, or Fair'),
 
     // Product Age
     check('productAge')
-        .optional()
-        .isNumeric()
-        .withMessage('Product age must be a number')
-        .custom((value) => {
-            if (Number(value) < 0) {
-                throw new Error('Product age cannot be negative');
-            }
-            return true;
-        }),
+    .if((value, { req }) => req.body.product_condition === 'Used')
+    .notEmpty()
+    .withMessage('Product age is required for used products')
+    .isNumeric()
+    .withMessage('Product age must be a number')
+    .custom((value) => {
+        if (Number(value) < 0) {
+            throw new Error('Product age cannot be negative');
+        }
+        return true;
+    }),
 
     // Defects
     check('defects')
