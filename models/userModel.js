@@ -22,13 +22,31 @@ const userSchema = new mongoose.Schema({
     role: {
         type: Number,
         default: 0
+        // 0 = customer, 1 = seller, 2 = admin
+    },
+
+    sellerStatus: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none"
     },
 
     isVerified: {
         type: Boolean,
         default: false
-    }
+    },
+    phone: {
+        type: String,
+        default: ""
+    },
 
-}, { timestamps: true });
+    address: {
+        type: String,
+        default: ""
+    },
+
+}, {
+     timestamps: true }
+    );
 
 module.exports = mongoose.model("User", userSchema);

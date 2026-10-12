@@ -1,44 +1,58 @@
+
 const UserModel = require("../models/userModel");
 const TokenModel = require("../models/tokenModel");
-
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-
 const { emailSender } = require("../utils/emailSender");
 
-// =================REGISTER =================
-exports.register = async (req, res) => {
+const sendMailSafely = async (mailOptions) => {
+    try {
+        await emailSender(mailOptions);
+        return true;
+    } catch (error) {
+        console.log("Email sending skipped or failed:", error.message);
+        return false;
+    }
+};
 
-    // get data from request body
-    const { username, email, password } = req.body;
-    // check if username already exists
+// ================= REGISTER =================
+exports.register = async (req, res) => {
+    const { username, email, password, role } = req.body;
+    const selectedRole = Number(role) === 1 ? 1 : 0;
+
+    // Check if username already exists
     let usernameExists = await UserModel.findOne({ username });
 
     if (usernameExists) {
         return res.status(400).json({ error: "Username already exists." });
     }
-    // check if email already exists
+
+    // Check if email already exists
     let emailExists = await UserModel.findOne({ email });
 
     if (emailExists) {
         return res.status(400).json({ error: "Email already registered." });
     }
-    // hash password before saving
+
+    // Hash password before saving
     let salt = await bcrypt.genSalt(10);
     let hashedPassword = await bcrypt.hash(password, salt);
 
-    //create new user
+    // Create new user
     let user = await UserModel.create({
         username,
         email,
-        password: hashedPassword
+        password: hashedPassword,
+        role: selectedRole,
+        sellerStatus: selectedRole === 1 ? "pending" : "none"
     });
 
     if (!user) {
         return res.status(400).json({ error: "Failed to register user." });
     }
-    //create email verification token
+
+    // Create email verification token
     let token = await TokenModel.create({
         user: user._id,
         token: crypto.randomBytes(16).toString("hex")
@@ -48,11 +62,10 @@ exports.register = async (req, res) => {
         return res.status(400).json({ error: "Token generation failed." });
     }
 
-    // verification link
     const URL = `http://localhost:5173/verify/${token.token}`;
 
-    // send verification email
-    emailSender({
+    // Send verification email. If Gmail is not configured, registration should still work for testing.
+    const emailSent = await sendMailSafely({
         from: "noreply@sastopasal.com",
         to: email,
         subject: "Verify your account",
@@ -60,48 +73,45 @@ exports.register = async (req, res) => {
         html: `<a href="${URL}"><button>Verify Account</button></a>`
     });
 
-    // send success response
+    let userResponse = user.toObject();
+    delete userResponse.password;
+
     res.send({
         message: "User registered successfully.",
-        user
+        user: userResponse,
+        emailSent,
+        verificationToken: emailSent ? undefined : token.token
     });
-
 };
 
-// =================EMAIL VERIFICATION =================
+// ================= EMAIL VERIFICATION =================
 exports.emailVerification = async (req, res) => {
-
-    // find token
     let token = await TokenModel.findOne({ token: req.params.token });
 
     if (!token) {
         return res.status(400).json({ error: "Invalid or expired token." });
     }
 
-    // find user
     let user = await UserModel.findById(token.user);
 
     if (!user) {
         return res.status(400).json({ error: "User not found." });
     }
 
-    // check if already verified
     if (user.isVerified) {
         return res.status(400).json({ error: "User already verified." });
     }
 
-    // verify user
     user.isVerified = true;
     await user.save();
 
-    res.send({ message: "Email verified successfully." });
+    await TokenModel.findByIdAndDelete(token._id);
 
+    res.send({ message: "Email verified successfully." });
 };
 
-// =================RESEND VERIFICATION =================
+// ================= RESEND VERIFICATION =================
 exports.resendVerification = async (req, res) => {
-
-    // check email
     let user = await UserModel.findOne({ email: req.body.email });
 
     if (!user) {
@@ -112,7 +122,6 @@ exports.resendVerification = async (req, res) => {
         return res.status(400).json({ error: "User already verified." });
     }
 
-    // create new token
     let token = await TokenModel.create({
         user: user._id,
         token: crypto.randomBytes(16).toString("hex")
@@ -120,8 +129,7 @@ exports.resendVerification = async (req, res) => {
 
     const URL = `http://localhost:5173/verify/${token.token}`;
 
-    // send email
-    emailSender({
+    const emailSent = await sendMailSafely({
         from: "noreply@sastopasal.com",
         to: user.email,
         subject: "Verify your account",
@@ -129,21 +137,21 @@ exports.resendVerification = async (req, res) => {
         html: `<a href="${URL}"><button>Verify</button></a>`
     });
 
-    res.send({ message: "Verification email sent." });
-
+    res.send({
+        message: emailSent ? "Verification email sent." : "Verification token created, but email was not sent.",
+        emailSent,
+        verificationToken: emailSent ? undefined : token.token
+    });
 };
 
-// =================FORGET PASSWORD =================
+// ================= FORGET PASSWORD =================
 exports.forgetPassword = async (req, res) => {
-
-    // check email
     let user = await UserModel.findOne({ email: req.body.email });
 
     if (!user) {
         return res.status(400).json({ error: "Email not found." });
     }
 
-    // create reset token
     let token = await TokenModel.create({
         user: user._id,
         token: crypto.randomBytes(24).toString("hex")
@@ -151,8 +159,7 @@ exports.forgetPassword = async (req, res) => {
 
     const URL = `http://localhost:5173/resetpassword/${token.token}`;
 
-    // send email
-    emailSender({
+    const emailSent = await sendMailSafely({
         from: "noreply@sastopasal.com",
         to: user.email,
         subject: "Reset Password",
@@ -160,71 +167,65 @@ exports.forgetPassword = async (req, res) => {
         html: `<a href="${URL}"><button>Reset Password</button></a>`
     });
 
-    res.send({ message: "Password reset link sent." });
-
+    res.send({
+        message: emailSent ? "Password reset link sent." : "Password reset token created, but email was not sent.",
+        emailSent,
+        resetToken: emailSent ? undefined : token.token
+    });
 };
 
-// =================RESET PASSWORD =================
+// ================= RESET PASSWORD =================
 exports.resetPassword = async (req, res) => {
-
-    // verify token
     let token = await TokenModel.findOne({ token: req.params.token });
 
     if (!token) {
         return res.status(400).json({ error: "Invalid token." });
     }
 
-    // find user
     let user = await UserModel.findById(token.user);
 
     if (!user) {
         return res.status(400).json({ error: "User not found." });
     }
 
-    // hash new password
     let salt = await bcrypt.genSalt(10);
     let hashedPassword = await bcrypt.hash(req.body.password, salt);
 
-    // update password
     user.password = hashedPassword;
     await user.save();
 
-    res.send({ message: "Password updated successfully." });
+    await TokenModel.findByIdAndDelete(token._id);
 
+    res.send({ message: "Password updated successfully." });
 };
 
-// =================LOGIN =================
+// ================= LOGIN =================
 exports.login = async (req, res) => {
-
-    // get login details
     const { email, password } = req.body;
 
-    // check email
     let user = await UserModel.findOne({ email });
 
     if (!user) {
         return res.status(400).json({ error: "Email not registered." });
     }
 
-    // compare password
     let match = await bcrypt.compare(password, user.password);
 
     if (!match) {
         return res.status(401).json({ error: "Incorrect password." });
     }
 
-    // check verification
     if (!user.isVerified) {
         return res.status(400).json({ error: "Please verify your email first." });
     }
 
-    // create jwt token
     let token = jwt.sign(
         {
             _id: user._id,
             email: user.email,
             username: user.username,
-            role: user.role
+            role: user.role,
+            sellerStatus: user.sellerStatus
         },
         process.env.JWT_SECRET,
         { expiresIn: "7d" }
@@ -237,29 +238,70 @@ exports.login = async (req, res) => {
             _id: user._id,
             username: user.username,
             email: user.email,
-            role: user.role
+            role: user.role,
+            sellerStatus: user.sellerStatus
         }
     });
-
 };
 
-// =================GET USERS =================
+// ================= GET USERS =================
 exports.getUsersList = async (req, res) => {
-
-    // get all users
-    let users = await UserModel.find();
+    let users = await UserModel.find().select("-password");
 
     if (!users) {
         return res.status(400).json({ error: "Something went wrong." });
     }
 
     res.send(users);
-
 };
-// =================VERIFY USER BY ADMIN =================
-exports.verifyByAdmin = async (req, res) => {
 
-    // find user
+// ================= GET PROFILE =================
+exports.getProfile = async (req, res) => {
+    let user = await UserModel.findById(req.user._id).select("-password");
+
+    if (!user) {
+        return res.status(404).json({ error: "User not found." });
+    }
+
+    res.send(user);
+};
+
+// ================= UPDATE PROFILE =================
+exports.updateProfile = async (req, res) => {
+    let user = await UserModel.findByIdAndUpdate(
+        req.user._id,
+        {
+            username: req.body.username,
+            email: req.body.email,
+            phone: req.body.phone,
+            address: req.body.address
+        },
+        { new: true }
+    ).select("-password");
+
+    if (!user) {
+        return res.status(400).json({ error: "Failed to update profile." });
+    }
+
+    res.send({
+        message: "Profile updated successfully.",
+        user
+    });
+};
+
+// ================= DELETE USER =================
+exports.deleteUser = async (req, res) => {
+    let user = await UserModel.findByIdAndDelete(req.params.id);
+
+    if (!user) {
+        return res.status(404).json({ error: "User not found." });
+    }
+
+    res.send({ message: "User deleted successfully." });
+};
+
+// ================= VERIFY USER BY ADMIN =================
+exports.verifyByAdmin = async (req, res) => {
     let user = await UserModel.findById(req.params.id);
 
     if (!user) {
@@ -270,7 +312,6 @@ exports.verifyByAdmin = async (req, res) => {
         return res.status(400).json({ error: "User already verified." });
     }
 
-    // verify user
     user.isVerified = true;
     await user.save();
 
@@ -278,16 +319,18 @@ exports.verifyByAdmin = async (req, res) => {
         success: true,
         message: "User verified by admin."
     });
-
 };
 
-// =================UPDATE USER ROLE =================
+// ================= UPDATE USER ROLE =================
 exports.updateRole = async (req, res) => {
+    const selectedRole = Number(req.body.role);
 
-    // update role directly
     let user = await UserModel.findByIdAndUpdate(
         req.params.id,
-        { role: req.body.role },
+        {
+            role: selectedRole,
+            sellerStatus: selectedRole === 1 ? "approved" : "none"
+        },
         { new: true }
     );
 
@@ -299,5 +342,25 @@ exports.updateRole = async (req, res) => {
         message: "User role updated.",
         user
     });
+};
 
+// ================= UPDATE SELLER STATUS =================
+exports.updateSellerStatus = async (req, res) => {
+    let user = await UserModel.findById(req.params.id);
+
+    if (!user) {
+        return res.status(404).json({ error: "User not found." });
+    }
+
+    if (user.role !== 1) {
+        return res.status(400).json({ error: "This user is not a seller." });
+    }
+
+    user.sellerStatus = req.body.sellerStatus || user.sellerStatus;
+    await user.save();
+
+    res.send({
+        message: "Seller status updated.",
+        user
+    });
 };
