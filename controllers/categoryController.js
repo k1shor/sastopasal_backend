@@ -1,5 +1,7 @@
+const mongoose = require("mongoose");
 const CategoryModel = require("../models/categoryModel");
 const ProductModel = require("../models/productModel");
+const { uploadImage } = require("../utils/uploadImages");
 
 const makeSlug = (value) => {
     return value
@@ -10,8 +12,40 @@ const makeSlug = (value) => {
         .replace(/^-+|-+$/g, "");
 };
 
+const parseBoolean = (value, fallback) => {
+    if (value === undefined || value === null || value === "") {
+        return fallback;
+    }
+
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    return ["true", "1", "yes"].includes(String(value).toLowerCase());
+};
+
+const normalizeParent = (value) => {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    if (value === null) {
+        return null;
+    }
+
+    const text = String(value).trim();
+
+    if (text === "" || text === "null" || text === "undefined") {
+        return null;
+    }
+
+    return text;
+};
+
 exports.createCategory = async (req, res) => {
-    const { name, description, parent, isActive } = req.body;
+    const name = String(req.body.name || "").trim();
+    const description = req.body.description;
+    const parent = normalizeParent(req.body.parent);
 
     if (!name) {
         return res.status(400).json({ error: "Category name is required." });
@@ -28,6 +62,10 @@ exports.createCategory = async (req, res) => {
     }
 
     if (parent) {
+        if (!mongoose.Types.ObjectId.isValid(parent)) {
+            return res.status(400).json({ error: "Invalid parent category id." });
+        }
+
         let parentCategory = await CategoryModel.findById(parent);
 
         if (!parentCategory) {
@@ -35,12 +73,17 @@ exports.createCategory = async (req, res) => {
         }
     }
 
+    const image = req.file
+        ? await uploadImage(req.file, "sasto-pasal/categories")
+        : "";
+
     let category = await CategoryModel.create({
         name,
         slug,
         description,
         parent: parent || null,
-        isActive: isActive ?? true
+        isActive: parseBoolean(req.body.isActive, true),
+        image
     });
 
     res.status(201).send({
@@ -54,6 +97,10 @@ exports.getCategories = async (req, res) => {
 
     if (req.query.active === "true") {
         filter.isActive = true;
+    }
+
+    if (req.query.active === "false") {
+        filter.isActive = false;
     }
 
     if (req.query.parent) {
@@ -85,25 +132,49 @@ exports.updateCategory = async (req, res) => {
         return res.status(404).json({ error: "Category not found." });
     }
 
-    if (req.body.parent && req.body.parent === req.params.id) {
+    const parent = normalizeParent(req.body.parent);
+
+    if (parent && parent === req.params.id) {
         return res.status(400).json({ error: "Category cannot be its own parent." });
     }
 
-    if (req.body.parent) {
-        let parentCategory = await CategoryModel.findById(req.body.parent);
+    if (parent) {
+        if (!mongoose.Types.ObjectId.isValid(parent)) {
+            return res.status(400).json({ error: "Invalid parent category id." });
+        }
+
+        let parentCategory = await CategoryModel.findById(parent);
 
         if (!parentCategory) {
             return res.status(404).json({ error: "Parent category not found." });
         }
     }
 
-    category.name = req.body.name || category.name;
-    category.description = req.body.description ?? category.description;
-    category.parent = req.body.parent === undefined ? category.parent : req.body.parent || null;
-    category.isActive = req.body.isActive ?? category.isActive;
+    const nextName = req.body.name ? String(req.body.name).trim() : category.name;
+    const nextSlug =
+        req.body.slug || req.body.name
+            ? makeSlug(req.body.slug || nextName)
+            : category.slug;
 
-    if (req.body.slug || req.body.name) {
-        category.slug = makeSlug(req.body.slug || req.body.name);
+    if (nextName !== category.name || nextSlug !== category.slug) {
+        const duplicate = await CategoryModel.findOne({
+            _id: { $ne: category._id },
+            $or: [{ name: nextName }, { slug: nextSlug }]
+        });
+
+        if (duplicate) {
+            return res.status(400).json({ error: "Category already exists." });
+        }
+    }
+
+    category.name = nextName;
+    category.slug = nextSlug;
+    category.description = req.body.description ?? category.description;
+    category.parent = parent === undefined ? category.parent : parent;
+    category.isActive = parseBoolean(req.body.isActive, category.isActive);
+
+    if (req.file) {
+        category.image = await uploadImage(req.file, "sasto-pasal/categories");
     }
 
     await category.save();

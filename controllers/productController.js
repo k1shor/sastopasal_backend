@@ -1,9 +1,22 @@
 const ProductModel = require("../models/productModel");
 const CategoryModel = require("../models/categoryModel");
+const { collectUploadedFiles, uploadImages } = require("../utils/uploadImages");
 
 const isAdmin = (user) => user.role === 2;
 const isSellerOrAdmin = (product, user) => {
     return product.seller.toString() === user._id.toString() || isAdmin(user);
+};
+
+const parseBoolean = (value, fallback) => {
+    if (value === undefined || value === null || value === "") {
+        return fallback;
+    }
+
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    return ["true", "1", "yes"].includes(String(value).toLowerCase());
 };
 
 const buildProductPayload = (body, userId) => {
@@ -18,7 +31,7 @@ const buildProductPayload = (body, userId) => {
         usedCondition: body.usedCondition,
         productAge: body.productAge,
         defects: body.defects,
-        isAvailable: body.isAvailable
+        isAvailable: parseBoolean(body.isAvailable, undefined)
     };
 
     if (body.images) {
@@ -63,7 +76,19 @@ exports.createProduct = async (req, res) => {
         return res.status(404).json({ error: "Category not found." });
     }
 
-    let product = await ProductModel.create(buildProductPayload(req.body, req.user._id));
+    const uploadedImages = await uploadImages(
+        collectUploadedFiles(req),
+        "sasto-pasal/products"
+    );
+
+    const payload = buildProductPayload(req.body, req.user._id);
+
+    if (uploadedImages.length > 0) {
+        payload.images = uploadedImages;
+        payload.image = uploadedImages[0];
+    }
+
+    let product = await ProductModel.create(payload);
 
     res.status(201).send({
         message: "Product created successfully.",
@@ -162,6 +187,16 @@ exports.updateProduct = async (req, res) => {
     }
 
     const updates = buildProductPayload(req.body);
+
+    const uploadedImages = await uploadImages(
+        collectUploadedFiles(req),
+        "sasto-pasal/products"
+    );
+
+    if (uploadedImages.length > 0) {
+        updates.images = uploadedImages;
+        updates.image = uploadedImages[0];
+    }
 
     Object.assign(product, updates);
 
