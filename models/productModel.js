@@ -31,15 +31,17 @@ const productSchema = new mongoose.Schema({
         min: 0
     },
 
-    // category: {
-    //     type: ObjectId, 
-    //     ref: "Category"
-    // },
+    category: {
+        type: ObjectId, 
+        ref: "Category",
+        required: true
+     },
 
-    // subCategory: {
-    //     type: ObjectId, 
-    //     ref: "Category"
-    // },
+    subCategory: {
+        type: ObjectId, 
+        ref: "Category",
+        required: true
+    },
 
     count_in_stock: {
         type: Number,

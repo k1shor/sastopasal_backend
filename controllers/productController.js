@@ -61,7 +61,8 @@ exports.addProduct = async (req, res) => {
 //To list all products
 exports.getAllProducts = async (req, res) => {
     let products = await ProductModel.find()
-    // .populate('category')
+      .populate('category', 'category_name')
+      .populate('subCategory', 'category_name')
     if(!products){
         return res.status(400).json({error: "SOmething went wrong"})
     }
