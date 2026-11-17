@@ -257,7 +257,8 @@ exports.deleteProduct = async (req, res) => {
 // To get product details
 exports.getProductDetails = async (req, res) => {
     let product = await ProductModel.findById(req.params.id)
-    // .populate('category')
+        .populate('category', 'category_name')
+        .populate('subCategory', 'category_name')
     if(!product){
         return res.status(400).json({error:"Something went wrong"})
     }
