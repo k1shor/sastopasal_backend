@@ -13,6 +13,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const posRoutes = require("./routes/posRoutes");
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 
 app.get("/", (req, res) => {
-    res.json({ message: "SastoPasal backend is running." });
+  res.json({ message: "SastoPasal backend is running." });
 });
 
 app.use("/api/users", userRoutes);
@@ -33,30 +34,31 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/pos", posRoutes);
 
 // Keep API errors as JSON, including multer upload errors.
 app.use((error, req, res, next) => {
-    console.log(error.message);
+  console.log(error.message);
 
-    const status = error.status || (error.name === "MulterError" ? 400 : 500);
+  const status = error.status || (error.name === "MulterError" ? 400 : 500);
 
-    res.status(status).json({
-        error: error.message || "Internal server error."
-    });
+  res.status(status).json({
+    error: error.message || "Internal server error.",
+  });
 });
 
 const PORT = process.env.PORT || 5000;
 
 const startServer = () => {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 };
 
 if (connection.readyState === 1) {
-    startServer();
+  startServer();
 } else {
-    connection.once("open", startServer);
+  connection.once("open", startServer);
 }
 
 module.exports = app;
