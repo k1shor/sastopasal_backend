@@ -13,7 +13,8 @@ const orderRoutes = require("./routes/orderRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
-const posRoutes = require("./routes/posRoutes");
+const posProductRoutes = require("./routes/pos/posProductRoutes");
+const posCartRoutes = require("./routes/pos/posCartRoutes");
 
 const app = express();
 
@@ -34,7 +35,8 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/pos", posRoutes);
+app.use("/api/pos/products", posProductRoutes);
+app.use("/api/pos/cart", posCartRoutes);
 
 // Keep API errors as JSON, including multer upload errors.
 app.use((error, req, res, next) => {
